@@ -19,6 +19,7 @@ export interface Buffer {
     data: Float32Array | Int16Array;
     size: number;
     type: string;
+	target: number;
     componentType: BufferType;
     glBuffer: WebGLBuffer;
 }
@@ -90,6 +91,7 @@ const readBufferFromFile = (gltf: gltf.GlTf, buffers: ArrayBuffer[], accessor: g
         data,
         type,
         componentType,
+		target: bufferView.target
     } as Buffer;
 };
 
@@ -114,6 +116,7 @@ const getBufferFromName = (gl: GLContext, gltf: gltf.GlTf, buffers: ArrayBuffer[
         buffer,
         size: bufferData.size,
         type: bufferData.componentType,
+		target: bufferData.target
     } as GLBuffer;
 };
 
@@ -190,16 +193,24 @@ const loadAnimation = (gltf: gltf.GlTf, animation: gltf.Animation, buffers: Arra
 };
 
 const loadMesh = (gl: GLContext, gltf: gltf.GlTf, mesh: gltf.Mesh, buffers: ArrayBuffer[]) => {
-    let indices: WebGLBuffer | null = null;
+	let indices: GLBuffer | null = null;
     let elementCount = 0;
 
     if (mesh.primitives[0].indices !== undefined) {
         const indexAccessor = gltf.accessors![mesh.primitives[0].indices!];
-        const indexBuffer = readBufferFromFile(gltf, buffers, indexAccessor);
+		const indexBuffer = readBufferFromFile(gltf, buffers, indexAccessor);
 
-        indices = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
+        const buffer = gl.createBuffer() as WebGLBuffer;
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexBuffer.data, gl.STATIC_DRAW);
+
+		indices = {
+			buffer,
+			size: indexBuffer.size,
+			type: indexBuffer.componentType,
+			target: gl.ELEMENT_ARRAY_BUFFER
+		}
+
 
         elementCount = indexBuffer.data.length;
     } else {
@@ -375,6 +386,6 @@ const dispose = (gl: GLContext, model: Model) => {
 };
 
 export {
-    loadModel,
-    dispose,
+	dispose, loadModel
 };
+

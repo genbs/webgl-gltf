@@ -72,6 +72,7 @@ export interface GLBuffer {
     buffer: WebGLBuffer;
     type: number;
     size: number;
+    target: number;
 }
 
 /**
@@ -79,7 +80,7 @@ export interface GLBuffer {
  */
 export interface Mesh {
     elementCount: number;
-    indices: WebGLBuffer | null;
+    indices: GLBuffer | null;
     positions: GLBuffer;
     normals: GLBuffer | null;
     tangents: GLBuffer | null;
