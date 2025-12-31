@@ -1,6 +1,6 @@
 import { mat4, quat } from 'gl-matrix';
 
-export const createMat4FromArray = (array: Float32Array | Int16Array | number[]) => {
+export const createMat4FromArray = (array: ArrayLike<number>) => {
     return mat4.fromValues(
         array[0],  array[1],  array[2],  array[3],
         array[4],  array[5],  array[6],  array[7],

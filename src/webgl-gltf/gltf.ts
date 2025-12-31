@@ -1,7 +1,7 @@
-import * as gltf from './types/gltf';
 import { mat4, quat, vec3, vec4 } from 'gl-matrix';
-import { createMat4FromArray, applyRotationFromQuat } from './mat';
-import { Channel, Node, Mesh, Model, KeyFrame, Skin, Material, GLBuffer, Animation } from './types/model';
+import { applyRotationFromQuat, createMat4FromArray } from './mat';
+import * as gltf from './types/gltf';
+import { Animation, Channel, GLBuffer, KeyFrame, Material, Mesh, Model, Node, Skin } from './types/model';
 
 type GLContext = WebGLRenderingContext | WebGL2RenderingContext;
 
@@ -15,23 +15,54 @@ const accessorSizes = {
     'MAT4': 16
 };
 
+export enum BufferType {
+    Byte = 5120,
+    UnsignedByte = 5121,
+    Short = 5122,
+    UnsignedShort = 5123,
+    UnsignedInt = 5125,
+    Float = 5126,
+}
+
+const componentByteSize = {
+    [BufferType.Byte]: 1,
+    [BufferType.UnsignedByte]: 1,
+    [BufferType.Short]: 2,
+    [BufferType.UnsignedShort]: 2,
+    [BufferType.UnsignedInt]: 4,
+    [BufferType.Float]: 4,
+} as const;
+
+const glTypeToTypedArray = (componentType: BufferType) => {
+    switch (componentType) {
+        case BufferType.Byte:
+            return Int8Array;
+        case BufferType.UnsignedByte:
+            return Uint8Array;
+        case BufferType.Short:
+            return Int16Array;
+        case BufferType.UnsignedShort:
+            return Uint16Array;
+        case BufferType.UnsignedInt:
+            return Uint32Array;
+        case BufferType.Float:
+        default:
+            return Float32Array;
+    }
+};
+
 export interface Buffer {
-    data: Float32Array | Int16Array;
+    data: Int8Array | Uint8Array | Int16Array | Uint16Array | Uint32Array | Float32Array;
     size: number;
     type: string;
-	target: number;
+    target: number;
     componentType: BufferType;
     glBuffer: WebGLBuffer;
 }
 
-export enum BufferType {
-    Float = 5126,
-    Short = 5123,
-}
-
 const resolveEmbeddedBuffer = (uri: string): string => {
-    const content = uri.split(',')[1]; 
-    const binaryData = atob(content); 
+    const content = uri.split(',')[1];
+    const binaryData = atob(content);
     const arrayBuffer = new ArrayBuffer(binaryData.length);
     const uint8Array = new Uint8Array(arrayBuffer);
 
@@ -40,7 +71,7 @@ const resolveEmbeddedBuffer = (uri: string): string => {
     }
 
     const blob = new Blob([uint8Array], { type: 'application/octet-stream' }); // Crea un Blob
-    return URL.createObjectURL(blob); 
+    return URL.createObjectURL(blob);
 }
 
 const EMBEDDED_DATA_REGEXP = /(.*)data:(.*?)(;base64)?,(.*)$/;
@@ -81,17 +112,84 @@ const readBufferFromFile = (gltf: gltf.GlTf, buffers: ArrayBuffer[], accessor: g
     const size = accessorSizes[accessor.type];
     const componentType = accessor.componentType as BufferType;
     const type = accessor.type;
+    const byteOffset = (accessor.byteOffset || 0) + (bufferView.byteOffset || 0);
+    const length = accessor.count * size;
+    const byteStride = bufferView.byteStride || size * componentByteSize[componentType];
+    const elementSize = size * componentByteSize[componentType];
+    let data: Buffer['data'];
 
-    const data = componentType == BufferType.Float
-        ? new Float32Array(buffers[bufferView.buffer], (accessor.byteOffset || 0) + (bufferView.byteOffset || 0), accessor.count * size)
-        : new Int16Array(buffers[bufferView.buffer], (accessor.byteOffset || 0) + (bufferView.byteOffset || 0), accessor.count * size);
+    if (byteStride !== elementSize) {
+        const buffer = buffers[bufferView.buffer];
+        const view = new DataView(buffer, byteOffset);
+        const total = length;
+        const TypedArray = glTypeToTypedArray(componentType);
+        const interleaved = new TypedArray(total);
+        for (let i = 0; i < accessor.count; i++) {
+            const base = i * byteStride;
+            for (let c = 0; c < size; c++) {
+                const offset = base + c * componentByteSize[componentType];
+                const index = i * size + c;
+                switch (componentType) {
+                    case BufferType.Byte:
+                        interleaved[index] = view.getInt8(offset);
+                        break;
+                    case BufferType.UnsignedByte:
+                        interleaved[index] = view.getUint8(offset);
+                        break;
+                    case BufferType.Short:
+                        interleaved[index] = view.getInt16(offset, true);
+                        break;
+                    case BufferType.UnsignedShort:
+                        interleaved[index] = view.getUint16(offset, true);
+                        break;
+                    case BufferType.UnsignedInt:
+                        interleaved[index] = view.getUint32(offset, true);
+                        break;
+                    case BufferType.Float:
+                    default:
+                        interleaved[index] = view.getFloat32(offset, true);
+                        break;
+                }
+            }
+        }
+
+        return {
+            size,
+            data: interleaved,
+            type,
+            componentType,
+            target: bufferView.target
+        } as Buffer;
+    }
+
+    switch (componentType) {
+        case BufferType.Byte:
+            data = new Int8Array(buffers[bufferView.buffer], byteOffset, length);
+            break;
+        case BufferType.UnsignedByte:
+            data = new Uint8Array(buffers[bufferView.buffer], byteOffset, length);
+            break;
+        case BufferType.Short:
+            data = new Int16Array(buffers[bufferView.buffer], byteOffset, length);
+            break;
+        case BufferType.UnsignedShort:
+            data = new Uint16Array(buffers[bufferView.buffer], byteOffset, length);
+            break;
+        case BufferType.UnsignedInt:
+            data = new Uint32Array(buffers[bufferView.buffer], byteOffset, length);
+            break;
+        case BufferType.Float:
+        default:
+            data = new Float32Array(buffers[bufferView.buffer], byteOffset, length);
+            break;
+    }
 
     return {
         size,
         data,
         type,
         componentType,
-		target: bufferView.target
+        target: bufferView.target
     } as Buffer;
 };
 
@@ -116,7 +214,7 @@ const getBufferFromName = (gl: GLContext, gltf: gltf.GlTf, buffers: ArrayBuffer[
         buffer,
         size: bufferData.size,
         type: bufferData.componentType,
-		target: bufferData.target
+        target: bufferData.target
     } as GLBuffer;
 };
 
@@ -135,7 +233,8 @@ const loadNodes = (index: number, node: gltf.Node): Node => {
         localBindTransform: transform,
         animatedTransform: mat4.create(),
         skin: node.skin,
-        mesh: node.mesh
+        mesh: node.mesh,
+        matrix: node.matrix
     } as Node;
 };
 
@@ -164,7 +263,7 @@ const loadAnimation = (gltf: gltf.GlTf, animation: gltf.Animation, buffers: Arra
             };
         }
 
-        for (let i = 0; i < channel.time.data.length; i ++) {
+        for (let i = 0; i < channel.time.data.length; i++) {
             const size = channel.interpolation === 'CUBICSPLINE' ? channel.buffer.size * 3 : channel.buffer.size;
             const offset = channel.interpolation === 'CUBICSPLINE' ? channel.buffer.size : 0;
 
@@ -193,23 +292,23 @@ const loadAnimation = (gltf: gltf.GlTf, animation: gltf.Animation, buffers: Arra
 };
 
 const loadMesh = (gl: GLContext, gltf: gltf.GlTf, mesh: gltf.Mesh, buffers: ArrayBuffer[]) => {
-	let indices: GLBuffer | null = null;
+    let indices: GLBuffer | null = null;
     let elementCount = 0;
 
     if (mesh.primitives[0].indices !== undefined) {
         const indexAccessor = gltf.accessors![mesh.primitives[0].indices!];
-		const indexBuffer = readBufferFromFile(gltf, buffers, indexAccessor);
+        const indexBuffer = readBufferFromFile(gltf, buffers, indexAccessor);
 
         const buffer = gl.createBuffer() as WebGLBuffer;
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexBuffer.data, gl.STATIC_DRAW);
 
-		indices = {
-			buffer,
-			size: indexBuffer.size,
-			type: indexBuffer.componentType,
-			target: gl.ELEMENT_ARRAY_BUFFER
-		}
+        indices = {
+            buffer,
+            size: indexBuffer.size,
+            type: indexBuffer.componentType,
+            target: gl.ELEMENT_ARRAY_BUFFER
+        }
 
 
         elementCount = indexBuffer.data.length;
@@ -219,6 +318,7 @@ const loadMesh = (gl: GLContext, gltf: gltf.GlTf, mesh: gltf.Mesh, buffers: Arra
     }
 
     return {
+        name: mesh.name,
         indices,
         elementCount,
         positions: getBufferFromName(gl, gltf, buffers, mesh, 'POSITION'),
@@ -312,7 +412,7 @@ const loadModel = async (gl: GLContext, uri: string) => {
 
     const buffers = await Promise.all(
         gltf.buffers!.map(async (b) => await getBuffer(uri, b.uri!)
-    ));
+        ));
 
     const scene = gltf.scenes![gltf.scene || 0];
     const meshes = gltf.meshes!.map(m => loadMesh(gl, gltf, m, buffers));
@@ -386,6 +486,5 @@ const dispose = (gl: GLContext, model: Model) => {
 };
 
 export {
-	dispose, loadModel
+    dispose, loadModel
 };
-

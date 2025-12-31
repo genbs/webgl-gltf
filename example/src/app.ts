@@ -1,10 +1,10 @@
-import * as shader from './shaders/shader-loader';
-import * as defaultShader from './shaders/default-shader';
 import * as camera from './camera';
-import * as inputs from './inputs';
 import * as cubemap from './cubemap';
+import * as inputs from './inputs';
 import { renderModel } from './renderer';
+import * as defaultShader from './shaders/default-shader';
 import { DefaultShader } from './shaders/default-shader';
+import * as shader from './shaders/shader-loader';
 
 import * as gltf from 'webgl-gltf';
 

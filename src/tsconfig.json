@@ -1,21 +1,21 @@
 {
-    "compilerOptions": {
-        "allowJs": false,
-        "target": "es6",
-        "module": "esnext",
-        "moduleResolution": "node",
-        "outDir": "../dist",
-        "baseUrl": "webgl-gltf",
-        "allowSyntheticDefaultImports": true,
-        "noImplicitAny": false,
-        "strictNullChecks": true,
-        "noImplicitThis": true,
-        "alwaysStrict": true,
-        "noUnusedLocals": true,
-        "noUnusedParameters": true,
-        "forceConsistentCasingInFileNames": true,
-        "esModuleInterop": true,
-        "sourceMap": true,
-        "declaration": true,
-    }
+	"compilerOptions": {
+		"allowJs": false,
+		"target": "ESNext",
+		"module": "CommonJS",
+		"moduleResolution": "node",
+		"outDir": "../dist",
+		"baseUrl": "webgl-gltf",
+		"allowSyntheticDefaultImports": true,
+		"noImplicitAny": false,
+		"strictNullChecks": true,
+		"noImplicitThis": true,
+		"alwaysStrict": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"forceConsistentCasingInFileNames": true,
+		"esModuleInterop": true,
+		"sourceMap": true,
+		"declaration": true
+	}
 }

@@ -1,4 +1,4 @@
-import { mat4, vec3, quat, vec4 } from 'gl-matrix';
+import { mat4, quat, vec3, vec4 } from 'gl-matrix';
 
 /**
  * Model root
@@ -23,6 +23,7 @@ export interface Node {
     localBindTransform: mat4;
     skin?: number;
     mesh?: number;
+    matrix?: mat4;
 }
 
 /**
@@ -79,6 +80,7 @@ export interface GLBuffer {
  * Mesh buffers and associated material
  */
 export interface Mesh {
+    name?: string;
     elementCount: number;
     indices: GLBuffer | null;
     positions: GLBuffer;
