@@ -1,5 +1,5 @@
 import { mat4, quat, vec3, vec4 } from 'gl-matrix';
-import { applyRotationFromQuat, createMat4FromArray } from './mat';
+import { createMat4FromArray } from './mat';
 import * as gltf from './types/gltf';
 import { Animation, Channel, GLBuffer, KeyFrame, Material, Mesh, Model, Node, Skin } from './types/model';
 
@@ -49,6 +49,49 @@ const glTypeToTypedArray = (componentType: BufferType) => {
         default:
             return Float32Array;
     }
+};
+
+const normalizeValue = (value: number, componentType: BufferType) => {
+    switch (componentType) {
+        case BufferType.Byte:
+            return Math.max(value / 127, -1);
+        case BufferType.UnsignedByte:
+            return value / 255;
+        case BufferType.Short:
+            return Math.max(value / 32767, -1);
+        case BufferType.UnsignedShort:
+            return value / 65535;
+        case BufferType.UnsignedInt:
+            return value / 4294967295;
+        case BufferType.Float:
+        default:
+            return value;
+    }
+};
+
+const shouldKeepInteger = (attributeName: string) => attributeName.startsWith('JOINTS_');
+
+const coerceBufferToFloat = (bufferData: Buffer, normalized?: boolean): Buffer => {
+    if (bufferData.componentType === BufferType.Float) return bufferData;
+
+    const source = bufferData.data as ArrayLike<number>;
+    const data = new Float32Array(source.length);
+
+    if (normalized) {
+        for (let i = 0; i < source.length; i++) {
+            data[i] = normalizeValue(source[i], bufferData.componentType);
+        }
+    } else {
+        for (let i = 0; i < source.length; i++) {
+            data[i] = source[i];
+        }
+    }
+
+    return {
+        ...bufferData,
+        data,
+        componentType: BufferType.Float
+    };
 };
 
 export interface Buffer {
@@ -204,7 +247,10 @@ const getBufferFromName = (gl: GLContext, gltf: gltf.GlTf, buffers: ArrayBuffer[
     }
 
     const accessor = getAccessor(gltf, mesh, name);
-    const bufferData = readBufferFromFile(gltf, buffers, accessor);
+    let bufferData = readBufferFromFile(gltf, buffers, accessor);
+    if (!shouldKeepInteger(name) && bufferData.componentType !== BufferType.Float) {
+        bufferData = coerceBufferToFloat(bufferData, accessor.normalized);
+    }
 
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -219,12 +265,18 @@ const getBufferFromName = (gl: GLContext, gltf: gltf.GlTf, buffers: ArrayBuffer[
 };
 
 const loadNodes = (index: number, node: gltf.Node): Node => {
-    const transform = mat4.create();
+    let transform: mat4;
 
-    if (node.translation !== undefined) mat4.translate(transform, transform, vec3.fromValues(node.translation[0], node.translation[1], node.translation[1]));
-    if (node.rotation !== undefined) applyRotationFromQuat(transform, node.rotation);
-    if (node.scale !== undefined) mat4.scale(transform, transform, vec3.fromValues(node.scale[0], node.scale[1], node.scale[1]));
-    if (node.matrix !== undefined) createMat4FromArray(node.matrix);
+    if (node.matrix !== undefined) {
+        transform = createMat4FromArray(node.matrix);
+    } else {
+        const translation = node.translation ? vec3.fromValues(node.translation[0], node.translation[1], node.translation[2]) : vec3.fromValues(0, 0, 0);
+        const rotation = node.rotation ? quat.fromValues(node.rotation[0], node.rotation[1], node.rotation[2], node.rotation[3]) : quat.create();
+        const scale = node.scale ? vec3.fromValues(node.scale[0], node.scale[1], node.scale[2]) : vec3.fromValues(1, 1, 1);
+
+        transform = mat4.create();
+        mat4.fromRotationTranslationScale(transform, rotation, translation, scale);
+    }
 
     return {
         id: index,
@@ -319,6 +371,7 @@ const loadMesh = (gl: GLContext, gltf: gltf.GlTf, mesh: gltf.Mesh, buffers: Arra
 
     return {
         name: mesh.name,
+        mode: mesh.primitives[0].mode,
         indices,
         elementCount,
         positions: getBufferFromName(gl, gltf, buffers, mesh, 'POSITION'),
@@ -344,6 +397,10 @@ const loadMaterial = async (gl: GLContext, material: gltf.Material, path: string
     let roughnessFactor = 0.0;
     let metallicFactor = 1.0;
     let emissiveFactor = vec3.fromValues(1.0, 1.0, 1.0);
+    const alphaMode = material.alphaMode ?? 'OPAQUE';
+    const alphaCutoff = material.alphaCutoff ?? 0.5;
+    const doubleSided = material.doubleSided ?? false;
+    const premultipliedAlpha = material.premultipliedAlpha ?? false;
 
     const pbr = material.pbrMetallicRoughness;
     if (pbr) {
@@ -385,6 +442,7 @@ const loadMaterial = async (gl: GLContext, material: gltf.Material, path: string
 
 
     return {
+        name: material.name,
         baseColorTexture,
         baseColorFactor,
         metallicRoughnessTexture,
@@ -394,6 +452,10 @@ const loadMaterial = async (gl: GLContext, material: gltf.Material, path: string
         emissiveFactor,
         normalTexture,
         occlusionTexture,
+        alphaMode,
+        alphaCutoff,
+        doubleSided,
+        premultipliedAlpha,
     } as Material;
 };
 

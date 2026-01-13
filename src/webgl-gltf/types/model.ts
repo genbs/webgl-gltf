@@ -81,6 +81,7 @@ export interface GLBuffer {
  */
 export interface Mesh {
     name?: string;
+    mode?: number;
     elementCount: number;
     indices: GLBuffer | null;
     positions: GLBuffer;
@@ -96,6 +97,7 @@ export interface Mesh {
  * Textures and material info for PBR.
  */
 export interface Material {
+    name?: string;
     baseColorTexture: WebGLTexture | null;
     baseColorFactor: vec4;
     metallicRoughnessTexture: WebGLTexture | null;
@@ -105,4 +107,8 @@ export interface Material {
     emissiveFactor: vec3;
     normalTexture: WebGLTexture | null;
     occlusionTexture: WebGLTexture | null;
+    alphaMode?: 'OPAQUE' | 'MASK' | 'BLEND' | string;
+    alphaCutoff?: number;
+    doubleSided?: boolean;
+    premultipliedAlpha?: boolean;
 }
